@@ -1,0 +1,218 @@
+import sys, time, json
+import requests
+
+accessKey = ''
+secretKey = ''
+credentials = 'accessKey=' + accessKey + ';secretKey=' + secretKey
+
+DOWNLOAD_DELAY = 5  # seconds
+DOWNLOAD_ATTEMPT_LIMIT = 10
+SCAN_LIMIT = 200
+VULN_LIMIT = 200
+
+
+def get_was_list_of_scans(credentials):
+    """
+    Returns a list of WAS v2 scans.
+
+    :param credentials: The WAS API keys in the format of "accessKey=X;secretKey=X".
+    :type credentials: str
+    :return: The list of WAS scans, each of which is a dict.
+    :rtype: list
+    """
+    url = "https://cloud.tenable.com/was/v2/scans"
+    querystring = {"limit": SCAN_LIMIT}
+    headers = {
+        "Accept": "application/json",
+        "X-ApiKeys": credentials
+    }
+
+    response = requests.request("GET", url, headers=headers, params=querystring).text
+    return json.loads(response)['data']
+
+
+def get_was_scan_notes(credentials, scan_uuid):
+    """
+    Returns the whole JSON dict from the "https://cloud.tenable.com/was/v2/scans/scan_id/notes"
+    endpoint. These contain any important warnings about the scan.
+
+    :param credentials: The WAS API keys in the format of "accessKey=X;secretKey=X".
+    :type credentials: str
+    :param scan_uuid: The scan UUID we're retrieving.
+    :type scan_uuid: str
+    :return: A string representation of the scan notes.
+    :rtype: str
+    """
+    url = "https://cloud.tenable.com/was/v2/scans"+ scan_uuid + "notes"
+
+    querystring = {"limit": "200", "offset": "0", "sort": "name:asc"}
+
+    headers = {
+        "Accept": "application/json",
+        "X-ApiKeys": credentials
+    }
+
+    return requests.request("GET", url, headers=headers, params=querystring).text
+
+
+def get_was_scan_vulnerabilities(credentials, scan_uuid):
+    """
+    Retrieves a list of WAS v2 vulnerabilities, including information on their attachments.
+
+    :param credentials: The WAS API keys in the format of "accessKey=X;secretKey=X".
+    :type credentials: str
+    :param scan_uuid: The scan UUID we're retrieving.
+    :type scan_uuid: str
+    :return: A list of dicts containing information about each vulnerability,
+    most importantly their scan attachment UUIDs.
+    :rtype: list
+    """
+
+    url = "https://cloud.tenable.com/was/v2/scans/" + scan_uuid + "/vulnerabilities"
+
+    querystring = {"limit": VULN_LIMIT, "offset": "0"}
+
+    headers = {
+        "Accept": "application/json",
+        "X-ApiKeys": credentials
+    }
+
+    all_vulnerabilities = list()
+    total_vulns = 1
+    vulns_added = 0
+
+    # return the vulnerabilities from every page of the list
+    while vulns_added < total_vulns:
+        querystring['offset'] = str(vulns_added)
+        response = requests.request("GET", url, headers=headers, params=querystring).text
+        response = json.loads(response)['data']
+
+        total = response['total_size']
+        for each in response['items']:
+            all_vulnerabilities.append(each)
+
+        total_vulns = response['total_size']
+        vulns_added = len(all_vulnerabilities)
+
+    return all_vulnerabilities
+
+
+def download_all_attachments(credentials, attachment_ids):
+    """
+    Iterates through a list of UUIDs for scan attachments, downloading each in turn.
+
+    :param credentials:
+    :type credentials:
+    :param attachment_ids:
+    :type attachment_ids: list
+    :return: n/a
+    :rtype: None
+    """
+    url = "https://cloud.tenable.com/was/v2/attachments/"
+
+    headers = {
+        "Accept": "text/plain",
+        "X-ApiKeys": credentials
+    }
+
+    for each_uuid in attachment_ids:
+        response = requests.request("GET", url + each_uuid, headers=headers)
+        if response.status_code != 200:
+            print("Error downloading attachment " + each_uuid)
+            continue
+        # save attachment to a file
+        print("We actually need to refactor this function, because the attachements ")
+        print("download API doesn't tell you the schema type. We either need to infer it ")
+        print("from the response, or instead it note it down when we pull it out of the ")
+        print("vulnerabilities list.")
+        print("We should be saving this attachment to the disk, but we're not.")
+
+
+def get_attachment_ids_from_vulns(scan_vulns):
+    """
+    Returns a list of strings, representing the attachment UUIDs in this scan.
+
+    :param scan_vulns: The list of vulnerabilities, a list of dicts where a given
+    attachment will be under scan_vulns[index]['attachments'][attchement_index].
+    :type scan_vulns: list
+    :return: A list of strings corresponding the attachment UUIDs of the vulnerabilities provided.
+    :rtype: list
+    """
+    attachment_ids = list()
+    for each_vuln in scan_vulns:
+        if len(each_vuln['attachments']) == 0:
+            continue
+        for each_id in each_vuln['attachments']:
+            attachment_ids.append(each_id)
+
+    return attachment_ids
+
+
+
+def get_was_scan_export(credentials, scan_uuid):
+    """
+    Gets the WAS v2 scan results in JSON format.
+
+    :param credentials: The WAS API keys in the format of "accessKey=X;secretKey=X".
+    :type credentials: str
+    :param scan_uuid: The scan UUID we're retrieving.
+    :type scan_uuid: str
+    :return:
+    :rtype: str
+    """
+    # first, request the export
+    url = "https://cloud.tenable.com/was/v2/scans/" + scan_uuid + "/report"
+
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "X-ApiKeys": credentials
+    }
+
+    response = requests.request("PUT", url, headers=headers)
+
+    attempt = 0
+    while attempt < DOWNLOAD_ATTEMPT_LIMIT:
+        time.sleep(DOWNLOAD_DELAY)
+        response = requests.request("GET", url, headers=headers)
+        if response.status_code == 200:
+            break
+        elif response.status_code != 404:
+            # some kind of error
+            break
+
+    return response.text
+
+
+def main(argv):
+    if len(argv) == 0:
+        print("Whoops.")
+        # print some usage stuff
+    elif len(argv) == 3:
+        print("Processing provided credentials")
+    # get a list of the WAS scans
+    my_list = get_was_list_of_scans(credentials)
+    # extra the desired UUID from the list
+    scan_uuid = my_list[0]
+    # get the scan notes
+    scan_notes = get_was_scan_notes(credentials, scan_uuid)
+    # save the scan notes
+
+    # get the scan vulnerabilities
+    scan_vulns = get_was_scan_vulnerabilities(credentials, scan_uuid)
+    attachment_ids = get_attachment_ids_from_vulns(scan_vulns)
+    # download all scan attachments
+    download_all_attachments(credentials, attachment_ids)
+
+    # get the JSON results
+    scan_json = get_was_scan_export(credentials, scan_uuid)
+    # save the JSON results
+    print("We should be saving the JSON results, but we're not.")
+    # ZIP everything up
+    print("We should be Zipping everything up, but we're not.")
+
+    print("We're done.")
+
+
+if __name__ == '__main__':
+    main(sys.argv)
