@@ -85,9 +85,8 @@ def get_was_scan_vulnerabilities(credentials, scan_uuid):
     while vulns_added < total_vulns:
         querystring['offset'] = str(vulns_added)
         response = requests.request("GET", url, headers=headers, params=querystring).text
-        response = json.loads(response)['data']
+        response = json.loads(response)
 
-        total = response['total_size']
         for each in response['items']:
             all_vulnerabilities.append(each)
 
