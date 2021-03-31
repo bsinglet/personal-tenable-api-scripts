@@ -1,4 +1,4 @@
-import sys, time, json
+import sys, time, json, shutil
 import requests
 
 accessKey = ''
@@ -98,7 +98,7 @@ def get_was_scan_vulnerabilities(credentials, scan_uuid):
 
 def download_all_attachments(credentials, attachment_ids):
     """
-    Iterates through a list of UUIDs for scan attachments, downloading each in turn.
+    Iterates through a list of scan attachments, downloading each in turn.
 
     :param credentials:
     :type credentials:
@@ -114,27 +114,25 @@ def download_all_attachments(credentials, attachment_ids):
         "X-ApiKeys": credentials
     }
 
-    for each_uuid in attachment_ids:
-        response = requests.request("GET", url + each_uuid, headers=headers)
-        if response.status_code != 200:
-            print("Error downloading attachment " + each_uuid)
-            continue
-        # save attachment to a file
-        print("We actually need to refactor this function, because the attachements ")
-        print("download API doesn't tell you the schema type. We either need to infer it ")
-        print("from the response, or instead it note it down when we pull it out of the ")
-        print("vulnerabilities list.")
-        print("We should be saving this attachment to the disk, but we're not.")
+    for each_attachment in attachment_ids:
+        # download the raw response for each attachment
+        response = requests.get(url, stream=True)
+        with open(each_attachment['attachment_name'], 'wb') as out_file:
+            shutil.copyfileobj(response.raw, out_file)
+        del response
+        continue
 
 
 def get_attachment_ids_from_vulns(scan_vulns):
     """
-    Returns a list of strings, representing the attachment UUIDs in this scan.
+    Returns a list of dicts, representing the attachments in this scan. Each dict 
+    has the following fields: attachment_id, created_at, attachment_name, md5, 
+    file_type, and size.
 
     :param scan_vulns: The list of vulnerabilities, a list of dicts where a given
     attachment will be under scan_vulns[index]['attachments'][attchement_index].
     :type scan_vulns: list
-    :return: A list of strings corresponding the attachment UUIDs of the vulnerabilities provided.
+    :return: A list of dicts corresponding to the metadata of the vulnerabilities' attachments.
     :rtype: list
     """
     attachment_ids = list()
