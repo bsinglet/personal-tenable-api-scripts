@@ -43,7 +43,7 @@ def get_was_scan_notes(credentials, scan_uuid):
     :return: A string representation of the scan notes.
     :rtype: str
     """
-    url = "https://cloud.tenable.com/was/v2/scans"+ scan_uuid + "notes"
+    url = "https://cloud.tenable.com/was/v2/scans/"+ scan_uuid + "/notes"
 
     querystring = {"limit": "200", "offset": "0", "sort": "name:asc"}
 
