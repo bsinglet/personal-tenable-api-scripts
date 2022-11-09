@@ -18,12 +18,15 @@ FOLDER_ID = 0  # modify this to only target a specific scan folder
 TARGET_NETWORK_UUID = '00000000-0000-0000-0000-000000000000'
 
 io = TenableIO(access_key=accessKey, secret_key=secretKey)
+
+# these are the two scan attributes we want to modify, we have to pass them as 
+# a dictionary because pyTenable doesn't break out these specific ones.
 kw = {"scanner_id": "AUTO-ROUTED",
      'target_network_uuid': TARGET_NETWORK_UUID}
 
 for each_scan in tqdm.tqdm(io.scans.list(folder_id=FOLDER_ID)):
     # print(f"Updating {each_scan['name']}")
-    # print(io.scans.details(scan_id=79))
+    # print(io.scans.details(scan_id=each_scan['id']))
     try:
         io.scans.configure(scan_id=each_scan['id'], **kw)
     except Exception as ex:
