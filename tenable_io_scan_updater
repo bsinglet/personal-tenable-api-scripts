@@ -1,0 +1,32 @@
+#!/usr/bin/python
+__author__ = 'Benjamin M. Singleton'
+__date__ = '09 November 2022'
+__version__ = '0.1.0'
+
+"""
+This script updates all existing scans in Tenable.io to:
+1) Switch from specified scanners to auto-routing.
+2) To a particular target-network-uuid.
+"""
+
+import tqdm
+from tenable.io import TenableIO
+
+accessKey = ''
+secretKey = ''
+FOLDER_ID = 0  # modify this to only target a specific scan folder
+TARGET_NETWORK_UUID = '00000000-0000-0000-0000-000000000000'
+
+io = TenableIO(access_key=accessKey, secret_key=secretKey)
+kw = {"scanner_id": "AUTO-ROUTED",
+     'target_network_uuid': TARGET_NETWORK_UUID}
+
+for each_scan in tqdm.tqdm(io.scans.list(folder_id=FOLDER_ID)):
+    # print(f"Updating {each_scan['name']}")
+    # print(io.scans.details(scan_id=79))
+    try:
+        io.scans.configure(scan_id=each_scan['id'], **kw)
+    except Exception as ex:
+        print(ex)
+        continue
+    # print(io.scans.details(scan_id=each_scan['id']))
